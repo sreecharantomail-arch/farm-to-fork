@@ -1,7 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
+import path from 'path';
+import fs from 'fs';
+
 dotenv.config();
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath, override: false });
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 // Use the SERVICE ROLE key on the backend only — it bypasses Row Level

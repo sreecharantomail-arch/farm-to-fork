@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "../components/ui/Button"
 import {
   Leaf, Plus, X, CheckCircle2, Clock, Truck, Factory,
-  ShoppingBag, AlertCircle, RefreshCw, Wheat, Star, ImagePlus, CalendarDays, Wand2, Trash2, QrCode, Printer, Download,
-  Bell, PackageCheck, Check
+  ShoppingBag, AlertCircle, RefreshCw, Wheat, CalendarDays, Wand2, QrCode, Printer, Download,
+  Bell, BarChart3, Info
 } from "lucide-react"
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react"
+import { useNavigate } from "react-router-dom"
 import axios from "axios"
 import { useAuth } from "../context/AuthContext"
+import { DecisionSupportPanel } from "../components/DecisionSupportPanel"
 
 const API = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api"
 
@@ -26,21 +28,7 @@ export interface FarmerNotification {
   message: string
 }
 
-const generateBatchNumber = () => {
-  const date = new Date()
-  const datePart = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`
-  const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase()
-  return `BCH-${datePart}-${randomPart}`
-}
 
-const createProductForm = () => ({
-  name: "",
-  category: "",
-  quantity: "",
-  batchNumber: generateBatchNumber(),
-  expiryDate: "",
-  organicStatus: true,
-})
 
 // Status config
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: React.ElementType; label: string }> = {
@@ -93,14 +81,7 @@ const normaliseProduct = (product: any): Product => ({
 export function FarmerDashboard() {
   const { token } = useAuth()
 
-  // Form state
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(createProductForm)
-  const [imageData, setImageData] = useState("")
-  const [imagePreview, setImagePreview] = useState("")
-  const photoInputRef = useRef<HTMLInputElement>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [formMsg, setFormMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
+
 
   // Products state
   const [products, setProducts] = useState<Product[]>([])
@@ -109,137 +90,43 @@ export function FarmerDashboard() {
   const [productError, setProductError] = useState("")
 
   // Notification state
-  const [notifications, setNotifications] = useState<FarmerNotification[]>([])
-  const [showNotifications, setShowNotifications] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
-  // Deal Status State: { [productId: string]: "requested" | "accepted" | "dispatched" | "declined" }
-  const [deals, setDeals] = useState<Record<string, "requested" | "accepted" | "dispatched" | "declined">>({})
-  const [decisions, setDecisions] = useState<Record<string, { decision: "Accepted" | "Rejected"; reason?: string; date: string; time: string }>>({})
+  // Dashboard API state
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [loadingDashboard, setLoadingDashboard] = useState(true)
+  const [dashboardError, setDashboardError] = useState("")
+
+  const navigate = useNavigate()
+
 
   const headers = { Authorization: `Bearer ${token}` }
 
-  // Load Farmer Notifications from storage
-  const loadNotifications = useCallback(() => {
+  // Load Farmer Notifications unread count from API
+  const loadNotifications = useCallback(async () => {
     try {
-      const stored: FarmerNotification[] = JSON.parse(localStorage.getItem("farmer_notifications") || "[]")
-      setNotifications(stored)
+      const res = await axios.get(`${API}/notifications/unread-count`, { headers: { Authorization: `Bearer ${token}` } })
+      if (res.data.success) {
+        setUnreadCount(res.data.count)
+      }
     } catch {
-      setNotifications([])
+      setUnreadCount(0)
     }
-  }, [])
-
-  // Load Deal Statuses
-  const loadDeals = useCallback(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("farmer_deals") || "{}")
-      setDeals(stored)
-    } catch {
-      setDeals({})
-    }
-  }, [])
-
-  // Load Processor Intake Decisions
-  const loadDecisions = useCallback(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("processor_decisions") || "{}")
-      setDecisions(stored)
-    } catch {
-      setDecisions({})
-    }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     loadNotifications()
-    loadDeals()
-    loadDecisions()
     const handleUpdate = () => {
       loadNotifications()
-      loadDeals()
-      loadDecisions()
       fetchProducts()
+      fetchDashboard()
     }
     window.addEventListener("farmer_notifications_updated", handleUpdate)
-    window.addEventListener("farmer_deals_updated", handleUpdate)
-    window.addEventListener("storage", handleUpdate)
     return () => {
       window.removeEventListener("farmer_notifications_updated", handleUpdate)
-      window.removeEventListener("farmer_deals_updated", handleUpdate)
-      window.removeEventListener("storage", handleUpdate)
     }
-  }, [loadNotifications, loadDeals, loadDecisions])
+  }, [loadNotifications])
 
-  // Handlers for Farmer Deal Lifecycle
-  const handleAcceptDeal = (productId: string, batchNumber: string) => {
-    const updated = { ...deals, [productId]: "accepted", [batchNumber]: "accepted" }
-    setDeals(updated as any)
-    localStorage.setItem("farmer_deals", JSON.stringify(updated))
-    window.dispatchEvent(new Event("farmer_deals_updated"))
-    window.dispatchEvent(new Event("farmer_notifications_updated"))
-  }
-
-  const handleMarkReadyForDispatch = async (productId: string, batchNumber: string) => {
-    const updated = { ...deals, [productId]: "dispatched", [batchNumber]: "dispatched" }
-    setDeals(updated as any)
-    localStorage.setItem("farmer_deals", JSON.stringify(updated))
-    
-    try {
-      await axios.put(`${API}/products/${productId}/status`, { status: "In Transit" }, { headers })
-      setProducts(prev => prev.map(p => (p._id === productId || p.batchNumber === batchNumber) ? { ...p, status: "In Transit" } : p))
-    } catch (e) {
-      console.warn("Could not sync in-transit status", e)
-    }
-
-    window.dispatchEvent(new Event("farmer_deals_updated"))
-    window.dispatchEvent(new Event("farmer_notifications_updated"))
-  }
-
-  const handleDeclineDeal = async (productId: string, batchNumber: string) => {
-    if (!window.confirm("Decline this processor request? The produce will be returned to open market for other processors.")) return
-
-    const updated = { ...deals, [productId]: "declined", [batchNumber]: "declined" }
-    setDeals(updated as any)
-    localStorage.setItem("farmer_deals", JSON.stringify(updated))
-
-    // Record declined status in processor_declined_products map
-    try {
-      const declinedMap = JSON.parse(localStorage.getItem("processor_declined_products") || "{}")
-      declinedMap[productId] = true
-      declinedMap[batchNumber] = true
-      localStorage.setItem("processor_declined_products", JSON.stringify(declinedMap))
-    } catch (e) {
-      console.warn("Could not save declined product mapping", e)
-    }
-
-    try {
-      await axios.put(`${API}/products/${productId}/status`, { status: "Harvested" }, { headers })
-      setProducts(prev => prev.map(p => (p._id === productId || p.batchNumber === batchNumber) ? { ...p, status: "Harvested" } : p))
-    } catch (e) {
-      console.warn("Could not reset status to Harvested", e)
-    }
-
-    window.dispatchEvent(new Event("farmer_deals_updated"))
-    window.dispatchEvent(new Event("farmer_notifications_updated"))
-  }
-
-  // Notification Helpers
-  const markAsRead = (id: string) => {
-    const updated = notifications.map(n => (n.id === id ? { ...n, read: true } : n))
-    setNotifications(updated)
-    localStorage.setItem("farmer_notifications", JSON.stringify(updated))
-  }
-
-  const markAllAsRead = () => {
-    const updated = notifications.map(n => ({ ...n, read: true }))
-    setNotifications(updated)
-    localStorage.setItem("farmer_notifications", JSON.stringify(updated))
-  }
-
-  const clearAllNotifications = () => {
-    setNotifications([])
-    localStorage.setItem("farmer_notifications", JSON.stringify([]))
-  }
-
-  const unreadCount = notifications.filter(n => !n.read).length
 
   // Fetch farmer's own products
   const fetchProducts = useCallback(async () => {
@@ -281,124 +168,27 @@ export function FarmerDashboard() {
     }
   }, [token])
 
-  useEffect(() => { fetchProducts() }, [fetchProducts])
-
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, type, value } = e.target
-    if (type === "checkbox") {
-      const checked = (e.target as HTMLInputElement).checked
-      setForm(f => ({ ...f, [name]: checked }))
-    } else if (name === "quantity") {
-      if (value === "" || Number(value) >= 0) {
-        setForm(f => ({ ...f, [name]: value }))
-      }
-    } else {
-      setForm(f => ({ ...f, [name]: value }))
-    }
-  }
-
-  const openRegistrationForm = () => {
-    setForm(createProductForm())
-    setImageData("")
-    setImagePreview("")
-    setFormMsg(null)
-    setShowForm(true)
-  }
-
-  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setFormMsg({ type: "error", text: "Upload a JPEG, PNG, or WebP product photo." })
-      event.target.value = ""
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setFormMsg({ type: "error", text: "Product photos must be 5 MB or smaller." })
-      event.target.value = ""
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : ""
-      setImageData(dataUrl)
-      setImagePreview(dataUrl)
-      setFormMsg(null)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const removePhoto = () => {
-    setImageData("")
-    setImagePreview("")
-    if (photoInputRef.current) photoInputRef.current.value = ""
-    setFormMsg(null)
-  }
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.name || !form.category || !form.quantity || !form.expiryDate) {
-      setFormMsg({ type: "error", text: "Please fill in all fields." })
-      return
-    }
-
-    setSubmitting(true)
+  const fetchDashboard = useCallback(async () => {
+    setLoadingDashboard(true)
+    setDashboardError("")
     try {
-      // Generate unique 6-digit numeric Product ID
-      const product_id = Math.floor(100000 + Math.random() * 900000)
-
-      const res = await axios.post(
-        `${API}/products`,
-        { ...form, quantity: Number(form.quantity), imageData, blockchainHash: null, product_id },
-        { headers }
-      )
-
-      // Attach farmer profile location mapping
-      try {
-        const storedUser = JSON.parse(localStorage.getItem("farmchain_user") || "{}")
-        const currentFarmerLoc = storedUser.address || localStorage.getItem("farmer_address") || ""
-        if (currentFarmerLoc) {
-          const locMap = JSON.parse(localStorage.getItem("product_farmer_locations") || "{}")
-          locMap[String(product_id)] = currentFarmerLoc
-          locMap[String(form.batchNumber)] = currentFarmerLoc
-          if (res.data?.data?.id) locMap[String(res.data.data.id)] = currentFarmerLoc
-          localStorage.setItem("product_farmer_locations", JSON.stringify(locMap))
-        }
-      } catch (err) {
-        console.warn("Could not save product location map", err)
-      }
-
-      setFormMsg({ type: "success", text: "✅ Product submitted! Awaiting admin approval." })
-      setForm(createProductForm())
-      setImageData("")
-      setImagePreview("")
-      setShowForm(false)
-      fetchProducts()
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 413) {
-        setFormMsg({ type: "error", text: "The active backend has a smaller upload limit. Deploy the latest backend update, or remove the photo and try again." })
-      } else {
-        const message = axios.isAxiosError(error) && error.response?.data?.message
-          ? error.response.data.message
-          : "Registration failed. Check backend is running."
-        setFormMsg({ type: "error", text: message })
-      }
+      const res = await axios.get(`${API}/farmer/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+      setDashboardData(res.data.data)
+    } catch {
+      setDashboardError("Unable to load dashboard data. Please try again.")
     } finally {
-      setSubmitting(false)
+      setLoadingDashboard(false)
     }
-  }
+  }, [token])
 
-  // Stats derived from products
-  const stats = {
-    total: products.length,
-    harvested: products.filter(p => p.status === "Harvested").length,
-    inTransit: products.filter(p => p.status === "In Transit").length,
-    avgQuality: products.length
-      ? (products.reduce((s, p) => s + (p.aiQualityScore || 0), 0) / products.length * 100).toFixed(0)
-      : 0,
-  }
+  useEffect(() => { 
+    fetchProducts()
+    fetchDashboard()
+  }, [fetchProducts, fetchDashboard])
+
+
+
+
 
   return (
     <div className="space-y-8">
@@ -410,13 +200,12 @@ export function FarmerDashboard() {
         </div>
 
         <div className="flex items-center gap-3 relative">
-          {/* Notification Bell Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setShowNotifications(prev => !prev)}
+              onClick={() => navigate('/farmer/notifications')}
               className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-foreground transition-all hover:border-green-500/40 focus:outline-none"
               title="Notifications"
-              aria-label="Toggle notifications"
+              aria-label="View notifications"
             >
               <Bell className="h-5 w-5 text-slate-300" />
               {unreadCount > 0 && (
@@ -425,246 +214,141 @@ export function FarmerDashboard() {
                 </span>
               )}
             </button>
-
-            {/* Notification Dropdown Panel */}
-            {showNotifications && (
-              <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl border border-white/10 bg-slate-900/95 backdrop-blur-xl p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-emerald-400" />
-                    <h3 className="font-semibold text-sm text-foreground">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium">
-                        {unreadCount} new
-                      </span>
-                    )}
-                  </div>
-                  {notifications.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={markAllAsRead}
-                        className="text-[11px] text-slate-400 hover:text-emerald-400 transition-colors"
-                      >
-                        Mark all read
-                      </button>
-                      <span className="text-slate-600">·</span>
-                      <button
-                        onClick={clearAllNotifications}
-                        className="text-[11px] text-slate-400 hover:text-red-400 transition-colors"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="max-h-80 overflow-y-auto space-y-2.5 pr-1">
-                  {notifications.length === 0 ? (
-                    <div className="py-8 text-center text-slate-400 text-xs">
-                      <Wheat className="h-8 w-8 mx-auto mb-2 text-slate-500/40" />
-                      No notifications yet.<br />You will be notified when a processor marks interest.
-                    </div>
-                  ) : (
-                    notifications.map(n => (
-                      <div
-                        key={n.id}
-                        onClick={() => markAsRead(n.id)}
-                        className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                          n.read
-                            ? "bg-white/[0.02] border-white/5 opacity-75"
-                            : "bg-emerald-500/10 border-emerald-500/30 shadow-sm"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
-                            n.type === "processor_accepted" 
-                              ? "bg-green-500/20 text-green-400" 
-                              : n.type === "processor_rejected" 
-                              ? "bg-red-500/20 text-red-400" 
-                              : "bg-blue-500/20 text-blue-400"
-                          }`}>
-                            {n.type === "processor_accepted" ? (
-                              <CheckCircle2 className="h-4 w-4" />
-                            ) : n.type === "processor_rejected" ? (
-                              <AlertCircle className="h-4 w-4" />
-                            ) : (
-                              <Factory className="h-4 w-4" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-1">
-                              <p className="text-xs font-semibold text-foreground truncate">
-                                {n.type === "processor_interest"
-                                  ? "🏢 Processor Expressed Interest"
-                                  : n.type === "processor_accepted"
-                                  ? "✅ Batch Verified & Accepted"
-                                  : "❌ Produce Rejected at Intake"}
-                              </p>
-                              {!n.read && (
-                                <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-300 mt-1 line-clamp-2 leading-relaxed">
-                              {n.message}
-                            </p>
-                            <p className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1">
-                              <Clock className="h-3 w-3" /> {n.date} at {n.time}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
-          <Button onClick={openRegistrationForm} className="gap-2">
+          <Button onClick={() => navigate('/farmer/products?action=add')} className="gap-2">
             <Plus className="h-4 w-4" />
             Register New Harvest
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Total Batches", value: stats.total, icon: Wheat, color: "text-green-400" },
-          { label: "Harvested", value: stats.harvested, icon: Leaf, color: "text-lime-400" },
-          { label: "In Transit", value: stats.inTransit, icon: Truck, color: "text-yellow-400" },
-          { label: "Avg Quality", value: `${stats.avgQuality}%`, icon: Star, color: "text-purple-400" },
-        ].map(s => (
-          <div key={s.label} className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 flex items-center gap-4">
-            <div className={`p-3 rounded-xl bg-white/5 ${s.color}`}>
-              <s.icon className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{s.value}</p>
-              <p className="text-xs text-slate-400">{s.label}</p>
-            </div>
-          </div>
-        ))}
+      {/* Quick Actions */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={() => navigate('/farmer/products?action=add')} className="gap-2 shrink-0">
+          <Plus className="h-4 w-4" /> Add Product
+        </Button>
+        <Button variant="outline" onClick={() => document.getElementById('my-products-section')?.scrollIntoView({ behavior: 'smooth' })} className="gap-2 shrink-0 border-white/10">
+          <Wheat className="h-4 w-4" /> View Products
+        </Button>
+        <Button variant="outline" onClick={() => navigate('/farmer/ai-services')} className="gap-2 shrink-0 border-white/10">
+          <Wand2 className="h-4 w-4" /> AI Services
+        </Button>
+        <Button variant="outline" onClick={() => navigate('/tracker')} className="gap-2 shrink-0 border-white/10">
+          <QrCode className="h-4 w-4" /> Traceability
+        </Button>
+        <Button variant="outline" onClick={() => navigate('/farmer/analytics')} className="gap-2 shrink-0 border-white/10">
+          <BarChart3 className="h-4 w-4" /> Analytics
+        </Button>
       </div>
 
-      {/* Register Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-6">
-          <div className="w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] overflow-y-auto overscroll-contain scroll-smooth rounded-2xl border border-white/10 bg-slate-900 p-5 sm:p-6 shadow-2xl">
-            <div className="mb-5 flex items-center justify-between border-b border-emerald-100 pb-4 sm:mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">Register New Harvest</h2>
-                <p className="text-sm text-slate-400 mt-0.5">AI analysis will run automatically on submission.</p>
+      {/* Stats */}
+      {loadingDashboard ? (
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-white/5 text-slate-300">
+          <RefreshCw className="h-4 w-4 animate-spin text-green-400" />
+          Loading dashboard...
+        </div>
+      ) : dashboardError ? (
+        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          {dashboardError}
+        </div>
+      ) : dashboardData ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Total Products", value: dashboardData.stats.totalProducts, icon: Wheat, color: "text-blue-400" },
+              { label: "Active Products", value: dashboardData.stats.activeProducts, icon: Leaf, color: "text-green-400" },
+              { label: "Completed Products", value: dashboardData.stats.completedProducts, icon: CheckCircle2, color: "text-emerald-400" },
+              { label: "Pending Requests", value: dashboardData.stats.pendingRequests, icon: Bell, color: "text-amber-400" },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 flex items-center gap-4">
+                <div className={`p-3 rounded-xl bg-white/5 ${s.color}`}>
+                  <s.icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{s.value}</p>
+                  <p className="text-xs text-slate-400">{s.label}</p>
+                </div>
               </div>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-primary transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+            ))}
+          </div>
 
-            <form onSubmit={handleRegister} className="space-y-3 sm:space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+          <DecisionSupportPanel />
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Batch / Supply Status */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Truck className="h-4 w-4 text-primary" /> Supply Chain Status
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Product Name", name: "name", placeholder: "e.g. Organic Tomatoes" },
-                  { label: "Category", name: "category", placeholder: "e.g. Vegetables" },
-                  { label: "Quantity (kg)", name: "quantity", placeholder: "500", type: "number" },
-                  { label: "Expiry Date", name: "expiryDate", placeholder: "", type: "date" },
-                  { label: "Batch Number", name: "batchNumber", placeholder: "", readOnly: true },
-                ].map(f => (
-                  <div key={f.name} className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-300">{f.label}</label>
-                    <input
-                      type={f.type || "text"}
-                      name={f.name}
-                      min={f.type === "number" ? "0" : undefined}
-                      step={f.type === "number" ? "any" : undefined}
-                      onKeyDown={f.type === "number" ? (e) => { if (e.key === "-" || e.key === "e") e.preventDefault() } : undefined}
-                      value={(form as any)[f.name]}
-                      onChange={handleFormChange}
-                      placeholder={f.placeholder}
-                      readOnly={f.readOnly}
-                      className="flex h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
-                    />
+                  { label: "Active/Harvested", value: dashboardData.statusSummary.harvested, icon: Leaf, color: "text-lime-400" },
+                  { label: "Processing", value: dashboardData.statusSummary.processing, icon: Factory, color: "text-blue-400" },
+                  { label: "In Transit", value: dashboardData.statusSummary.inTransit, icon: Truck, color: "text-yellow-400" },
+                  { label: "Delivered", value: dashboardData.statusSummary.delivered, icon: ShoppingBag, color: "text-purple-400" },
+                ].map(status => (
+                  <div key={status.label} className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
+                    <div className={`p-2 rounded-lg bg-white/5 ${status.color}`}>
+                      <status.icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-foreground">{status.value}</p>
+                      <p className="text-[11px] text-slate-400">{status.label}</p>
+                    </div>
                   </div>
                 ))}
               </div>
+            </div>
 
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 sm:p-4">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div>
-                    <label htmlFor="productPhoto" className="text-sm font-medium text-foreground">Product Photo</label>
-                    <p className="text-xs text-slate-400 mt-0.5">JPEG, PNG, or WebP up to 5 MB.</p>
+            {/* Recent Activity */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col max-h-72">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2 shrink-0">
+                <Clock className="h-4 w-4 text-primary" /> Recent Activity
+              </h3>
+              <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                {dashboardData.recentActivity.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    No recent activity
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs text-primary border border-emerald-100">
-                    <Wand2 className="h-3 w-3" /> AI ready
-                  </span>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 items-start">
-                  <label htmlFor="productPhoto" className="flex min-h-20 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-300 bg-white px-4 py-4 text-sm font-medium text-primary hover:bg-emerald-50 transition-colors">
-                    <ImagePlus className="h-5 w-5" />
-                    {imagePreview ? "Choose another photo" : "Upload product photo"}
-                  </label>
-                  <input ref={photoInputRef} id="productPhoto" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="sr-only" />
-                  {imagePreview && (
-                    <div className="relative h-20 w-full sm:w-28 shrink-0">
-                      <img src={imagePreview} alt="Product preview" className="h-20 w-full rounded-xl border border-emerald-100 object-cover" />
-                      <button type="button" onClick={removePhoto} className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-emerald-100 bg-white text-red-500 shadow-sm hover:bg-red-50" aria-label="Remove uploaded photo">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
+                ) : (
+                  dashboardData.recentActivity.map((activity: any) => {
+                    const activityDate = new Date(activity.date);
+                    const isToday = activityDate.toDateString() === new Date().toDateString();
+                    const isYesterday = activityDate.toDateString() === new Date(Date.now() - 86400000).toDateString();
+                    const dateStr = isToday ? "Today" : isYesterday ? "Yesterday" : activityDate.toLocaleDateString();
+                    const timeStr = activityDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    return (
+                      <div key={activity.id} className="flex gap-3 text-sm border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                        <div className="w-16 shrink-0 text-right">
+                          <p className="text-xs font-medium text-slate-300">{dateStr}</p>
+                          <p className="text-[10px] text-slate-500">{timeStr}</p>
+                        </div>
+                        <div className="w-2 shrink-0 flex flex-col items-center">
+                          <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
+                          <div className="flex-1 w-px bg-white/10 mt-1" />
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <p className="text-foreground font-medium text-xs">{activity.title}</p>
+                          <p className="text-slate-400 text-[11px] mt-0.5 leading-relaxed">{activity.description}</p>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
               </div>
-
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs text-primary">
-                <CalendarDays className="h-4 w-4" />
-                Expiry date is required for shelf-life tracking.
-              </div>
-
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-                <input
-                  type="checkbox"
-                  id="organicStatus"
-                  name="organicStatus"
-                  checked={form.organicStatus}
-                  onChange={handleFormChange}
-                  className="h-4 w-4 accent-green-500"
-                />
-                <label htmlFor="organicStatus" className="text-sm text-slate-300">
-                  Certified Organic Product
-                </label>
-              </div>
-
-              {formMsg && (
-                <div className={`flex items-center gap-2 p-3 rounded-xl text-sm border ${
-                  formMsg.type === "success"
-                    ? "bg-green-500/10 border-green-500/30 text-green-400"
-                    : "bg-red-500/10 border-red-500/30 text-red-400"
-                }`}>
-                  {formMsg.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-                  {formMsg.text}
-                </div>
-              )}
-
-              <p className="text-xs text-green-400 flex items-center gap-1">
-                <Wand2 className="h-3.5 w-3.5" />
-                Wallet-less registration: The system will automatically secure this product on the blockchain for you!
-              </p>
-
-              <div className="flex gap-3 pt-2">
-                <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForm(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1" disabled={submitting}>
-                  {submitting ? "Processing..." : "Run AI & Register"}
-                </Button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
-      )}
+      ) : null}
+
+
+
 
       {/* My Products */}
-      <div>
+      <div id="my-products-section" className="pt-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-foreground">My Products</h2>
           <button
@@ -695,7 +379,7 @@ export function FarmerDashboard() {
               <p className="text-foreground font-medium">No products yet</p>
               <p className="text-slate-400 text-sm mt-1">Register your first harvest to get started.</p>
             </div>
-            <Button onClick={openRegistrationForm} className="gap-2">
+            <Button onClick={() => navigate('/farmer/products?action=add')} className="gap-2">
               <Plus className="h-4 w-4" /> Register Now
             </Button>
           </div>
@@ -731,111 +415,15 @@ export function FarmerDashboard() {
                   </div>
 
                   {/* Interactive Processor Deal Handshake & Intake Outcome */}
-                  {(() => {
-                    const decisionRecord = decisions[p._id] || decisions[p.batchNumber] || (p.status === "Rejected by Processor" ? { decision: "Rejected" as const, reason: "Rejected by Processor" } : null)
-                    const notif = notifications.find(n => (n.productId === p._id || n.batchNumber === p.batchNumber) && n.type === "processor_interest")
-                    const processorName = notif?.processorName || "Processing Facility"
+                  {/* Supply Chain Integration Placeholder */}
+                  <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-xs text-slate-300 flex items-center gap-2.5 shadow-sm">
+                    <Info className="h-4 w-4 text-slate-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-200">No active processor deals yet.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Processor engagement will appear here when supported by the supply-chain workflow.</p>
+                    </div>
+                  </div>
 
-                    // Stage 4: Final Intake Outcomes
-                    if (decisionRecord?.decision === "Accepted") {
-                      return (
-                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200 flex items-start gap-2.5 shadow-sm">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-emerald-100">✅ Verified & Accepted on Blockchain</p>
-                            <p className="text-[11px] text-emerald-300/80 mt-0.5">{processorName} verified QR certificate and scale weight. Produce has entered the processing line.</p>
-                          </div>
-                        </div>
-                      )
-                    }
-
-                    if (decisionRecord?.decision === "Rejected" || p.status === "Rejected by Processor") {
-                      return (
-                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200 flex items-start gap-2.5 shadow-sm">
-                          <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-red-100">❌ Rejected at Gate Intake by {processorName}</p>
-                            <p className="text-[11px] text-red-300/80 mt-0.5 leading-relaxed">
-                              Reason: {decisionRecord?.reason || "Intake scale weight or quality verification failed."}. Intake verification failed.
-                            </p>
-                          </div>
-                        </div>
-                      )
-                    }
-
-                    const isInterested = p.status === "Processing" || p.status === "In Transit" || Boolean(notif)
-                    const currentDealState = deals[p._id] || deals[p.batchNumber] || (isInterested ? "requested" : null)
-
-                    if (!isInterested || currentDealState === "declined" || !currentDealState) return null
-
-                    return (
-                      <div className="space-y-2 pt-1">
-                        {/* Stage 1: Requested -> Needs Farmer Acceptance */}
-                        {currentDealState === "requested" && (
-                          <div className="space-y-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 shadow-sm">
-                            <div className="flex items-start gap-2">
-                              <Factory className="h-4 w-4 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-amber-100">{processorName} expressed interest</p>
-                                <p className="text-[11px] text-amber-300/80 mt-0.5">Wants to procure this harvest batch ({p.quantity} kg). Confirm to accept deal.</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 pt-1">
-                              <Button
-                                size="sm"
-                                className="flex-1 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-sm h-8 font-medium"
-                                onClick={() => handleAcceptDeal(p._id, p.batchNumber)}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                                Accept Processor Request
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-xs gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500 rounded-xl h-8 font-medium"
-                                onClick={() => handleDeclineDeal(p._id, p.batchNumber)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                                Decline
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Stage 2: Accepted -> Ready for Dispatch */}
-                        {currentDealState === "accepted" && (
-                          <div className="space-y-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-200 shadow-sm">
-                            <div className="flex items-start gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-blue-100">Deal Accepted with {processorName}</p>
-                                <p className="text-[11px] text-blue-300/80 mt-0.5">Pack and crate harvest, then click below to confirm dispatch readiness.</p>
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              className="w-full text-xs gap-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-sm h-8 font-medium"
-                              onClick={() => handleMarkReadyForDispatch(p._id, p.batchNumber)}
-                            >
-                              <PackageCheck className="h-4 w-4" />
-                              📦 Ready for Dispatch
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Stage 3: Dispatched & In Transit */}
-                        {currentDealState === "dispatched" && (
-                          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200 flex items-center gap-2.5 shadow-sm">
-                            <Truck className="h-4 w-4 text-emerald-400 shrink-0 animate-bounce" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-emerald-100">🚚 Dispatched to {processorName}</p>
-                              <p className="text-[11px] text-emerald-300/80 truncate">In transit to processing facility. Gate scale intake authorized.</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
 
                   {/* AI Quality */}
                   <div className="flex items-center justify-between pt-1 border-t border-white/5">

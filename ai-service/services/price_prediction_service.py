@@ -54,9 +54,15 @@ class PricePredictionService:
         if pd.isna(data_source) or not data_source:
             data_source = 'DATABASE_CACHE'
         
-        # Calculate data age
-        age = (datetime.now().date() - data_as_of.date()).days
+        # Calculate data age relative to today
+        today = datetime.now().date()
+        obs_date = data_as_of.date()
+        age = (today - obs_date).days
         data_age_days = max(0, age)
+
+        # Established architectural staleness threshold (matches price_ingestion.py)
+        PRICE_DATA_MAX_STALENESS_DAYS = 2
+        is_stale = data_age_days > PRICE_DATA_MAX_STALENESS_DAYS
 
         predictions = []
         
@@ -114,42 +120,64 @@ class PricePredictionService:
         # Calculate retail ratio based on latest data or use 1.30 (30% markup) heuristic
         last_row = df.iloc[-1]
         if "retail_min" in df.columns and not pd.isna(last_row.get("retail_min")) and not pd.isna(last_row.get("retail_max")):
-            retail_current = (last_row["retail_min"] + last_row["retail_max"]) / 2
+            retail_current = float((last_row["retail_min"] + last_row["retail_max"]) / 2)
         else:
-            retail_current = current_price * 1.30
+            retail_current = float(current_price * 1.30)
 
-        retail_ratio = retail_current / current_price if current_price > 0 else 1.30
+        retail_ratio = float(retail_current / current_price) if current_price > 0 else 1.30
 
-        # Inject retail predictions
+        # Inject retail predictions and expiration status
         for p in predictions:
-            p["predicted_retail_price"] = round(p["predicted_price"] * retail_ratio, 2)
+            p["predicted_retail_price"] = round(float(p["predicted_price"] * retail_ratio), 2)
+            p["is_expired"] = bool(is_stale)
+            p["status"] = "EXPIRED" if is_stale else "ACTIVE"
 
         # Get last 10 days of historical data for the frontend chart
         history_subset = df.tail(10)
         historical_data = []
-        for _, row in history_subset.iterrows():
+        for idx, (_, row) in enumerate(history_subset.iterrows()):
             w_price = round(float(row['modal_price']), 2)
             if "retail_min" in df.columns and not pd.isna(row.get("retail_min")) and not pd.isna(row.get("retail_max")):
                 r_price = round(float(row["retail_min"] + row["retail_max"]) / 2, 2)
             else:
-                r_price = round(w_price * retail_ratio, 2)
+                r_price = round(float(w_price * retail_ratio), 2)
                 
             historical_data.append({
                 "date": row['date'].strftime("%Y-%m-%d"),
-                "price": w_price,
-                "retail_price": r_price
+                "price": float(w_price),
+                "retail_price": float(r_price),
+                "is_latest": idx == len(history_subset) - 1
             })
+
+        staleness_warning = None
+        if is_stale:
+            first_pred_date = predictions[0]["date"] if predictions else "N/A"
+            last_pred_date = predictions[-1]["date"] if predictions else "N/A"
+            staleness_warning = (
+                f"Live forecast unavailable: Historical market data is stale ({data_age_days} days old, latest observation: "
+                f"{data_as_of.strftime('%Y-%m-%d')}, freshness threshold: {PRICE_DATA_MAX_STALENESS_DAYS} days). "
+                f"Projections from {first_pred_date} to {last_pred_date} represent expired historical projections anchored to "
+                f"{data_as_of.strftime('%Y-%m-%d')} and cannot be used as an active forward-looking forecast. Updated market observations are needed."
+            )
 
         return {
             "commodity": commodity,
             "market": market,
-            "current_price": round(current_price, 2),
-            "current_retail_price": round(retail_current, 2),
+            "current_price": round(float(current_price), 2),
+            "current_retail_price": round(float(retail_current), 2),
             "historical_data": historical_data,
             "predictions": predictions,
+            "expired_projections": predictions if is_stale else [],
+            "forecast_available": not bool(is_stale),
+            "forecast_status": "EXPIRED_STALE_OBSERVATIONS" if is_stale else "ACTIVE_FORECAST",
             "trend": trend,
             "data_source": data_source,
             "data_as_of": data_as_of.strftime("%Y-%m-%d"),
-            "data_age_days": data_age_days,
-            "model_version": self.metadata.get("model_version", "unknown")
+            "data_age_days": int(data_age_days),
+            "is_stale": bool(is_stale),
+            "staleness_threshold_days": PRICE_DATA_MAX_STALENESS_DAYS,
+            "warning": staleness_warning,
+            "forecast_policy": "OBSERVATION_ANCHORED",
+            "forecast_base_date": data_as_of.strftime("%Y-%m-%d"),
+            "model_version": str(self.metadata.get("model_version", "unknown"))
         }

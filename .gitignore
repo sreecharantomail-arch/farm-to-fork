@@ -1,7 +1,22 @@
 node_modules/
 dist/
+dist-ssr/
+
+# Environment files and local overrides
 .env
-!frontend/.env
+.env*.local
+*.local
+.env.*
+!.env.example
+!**/.env.example
+
+# Temporary debug and scratch files
+temp_*.txt
+diff*.txt
+*.temp
+.temp/
+
+# Logs and caches
 *.log
 __pycache__/
 *.pyc
@@ -10,3 +25,9 @@ __pycache__/
 artifacts/
 cache/
 typechain-types/
+
+# Local agent metadata
+.agent/
+.agents/
+.gemini/
+.gsd/

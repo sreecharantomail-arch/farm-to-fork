@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import axios from "axios"
 import { useAuth } from "../../context/AuthContext"
-import { Search, Filter, AlertCircle, ShoppingBag, DollarSign, CheckCircle2 } from "lucide-react"
+import { AlertCircle, ShoppingBag, DollarSign, CheckCircle2 } from "lucide-react"
 
 const API_URL = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api"
 

@@ -2,8 +2,15 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Any, List
-from confluent_kafka import Producer, Consumer, KafkaException
-from confluent_kafka.admin import AdminClient, NewTopic
+try:
+    from confluent_kafka import Producer, Consumer, KafkaException
+    from confluent_kafka.admin import AdminClient, NewTopic
+    KAFKA_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - depends on native Kafka binary availability
+    Producer = Consumer = KafkaException = None
+    AdminClient = NewTopic = None
+    KAFKA_IMPORT_ERROR = exc
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,12 +24,19 @@ def get_kafka_config() -> dict:
         'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS
     }
 
-def get_producer() -> Producer:
+def _kafka_unavailable() -> bool:
+    return Producer is None or Consumer is None or AdminClient is None
+
+def get_producer():
     """Initialize and return a Kafka producer."""
+    if Producer is None:
+        raise RuntimeError(f"Kafka client unavailable: {KAFKA_IMPORT_ERROR}")
     return Producer(get_kafka_config())
 
-def get_consumer(group_id: str) -> Consumer:
+def get_consumer(group_id: str):
     """Initialize and return a Kafka consumer."""
+    if Consumer is None:
+        raise RuntimeError(f"Kafka client unavailable: {KAFKA_IMPORT_ERROR}")
     config = get_kafka_config()
     config.update({
         'group.id': group_id,
@@ -30,13 +44,22 @@ def get_consumer(group_id: str) -> Consumer:
     })
     return Consumer(config)
 
-def get_admin_client() -> AdminClient:
+def get_admin_client():
+    if AdminClient is None:
+        raise RuntimeError(f"Kafka client unavailable: {KAFKA_IMPORT_ERROR}")
     return AdminClient(get_kafka_config())
 
 def check_kafka_health() -> dict:
     """Check if Kafka is reachable and list topics."""
-    admin_client = get_admin_client()
+    if _kafka_unavailable():
+        logger.warning("Kafka support is disabled because the native client could not be loaded: %s", KAFKA_IMPORT_ERROR)
+        return {
+            "kafka_available": False,
+            "bootstrap_servers": KAFKA_BOOTSTRAP_SERVERS,
+            "topics": []
+        }
     try:
+        admin_client = get_admin_client()
         # Request cluster metadata, timeout after 2 seconds
         metadata = admin_client.list_topics(timeout=2.0)
         return {
@@ -54,6 +77,9 @@ def check_kafka_health() -> dict:
 
 def create_topics(topics: List[str]):
     """Create topics if they don't exist."""
+    if _kafka_unavailable():
+        logger.warning("Kafka topics not created because the native client could not be loaded: %s", KAFKA_IMPORT_ERROR)
+        return
     admin_client = get_admin_client()
     new_topics = [NewTopic(topic, num_partitions=1, replication_factor=1) for topic in topics]
     

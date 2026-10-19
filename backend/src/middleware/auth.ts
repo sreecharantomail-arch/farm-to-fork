@@ -10,7 +10,12 @@ declare global {
   }
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'farmchain_super_secret_key';
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+    throw new Error("FATAL ERROR: JWT_SECRET is not defined in production environment.");
+  }
+  return process.env.JWT_SECRET || 'farmchain_super_secret_key';
+};
 
 // Protect routes - verify JWT token
 export const protect = (req: Request, res: Response, next: NextFunction): void => {
@@ -26,7 +31,7 @@ export const protect = (req: Request, res: Response, next: NextFunction): void =
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; role: string };
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; role: string };
     req.user = decoded;
     next();
   } catch {

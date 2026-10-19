@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   LayoutDashboard, Leaf, PackageSearch, Truck,
-  Factory, ShoppingBag, LogOut, BarChart3, Menu, X, Edit3, Camera, MapPin, Locate, Loader2, Lock, AlertCircle, CheckCircle2, Clock, Send, Box, QrCode, Tag, Trash2, ShoppingCart, Package, DollarSign, RefreshCw, AlertTriangle, LinkIcon, Wand2
+  Factory, LogOut, BarChart3, Menu, X, Edit3, Camera, MapPin, Locate, Loader2, CheckCircle2, Clock, QrCode, Trash2, ShoppingCart, Package, DollarSign, RefreshCw, AlertTriangle, LinkIcon, Wand2, Bell, Activity, AlertOctagon, Brain
 } from "lucide-react"
 import { cn } from "../../utils"
 import { useAuth } from "../../context/AuthContext"
@@ -13,12 +13,18 @@ const roleNavMap: Record<string, { name: string; path: string; icon: React.Eleme
     { name: "User Directory", path: "/admin/users", icon: Edit3 },
     { name: "Supply Chain", path: "/admin/products", icon: Factory },
     { name: "Analytics", path: "/admin/analytics", icon: BarChart3 },
+    { name: "SC Intelligence", path: "/admin/supply-chain-analytics", icon: Activity },
+    { name: "Anomaly Intel", path: "/admin/anomaly-detection", icon: AlertOctagon },
+    { name: "AI Observability", path: "/admin/ai-observability", icon: Brain },
     { name: "Track Product", path: "/track", icon: PackageSearch },
   ],
   farmer: [
     { name: "My Farm", path: "/farmer", icon: Leaf },
     { name: "My Products", path: "/farmer/products", icon: PackageSearch },
     { name: "AI Services", path: "/farmer/ai-services", icon: Wand2 },
+    { name: "Supply Requests", path: "/farmer/requests", icon: ShoppingCart },
+    { name: "Analytics", path: "/farmer/analytics", icon: BarChart3 },
+    { name: "Notifications", path: "/farmer/notifications", icon: Bell },
     { name: "Track Product", path: "/track", icon: PackageSearch },
   ],
   processor: [
@@ -152,6 +158,12 @@ export function Sidebar() {
           localStorage.setItem("farmer_address", updates.address)
         } else if (user?.role === "processor") {
           localStorage.setItem("processor_address", updates.address)
+        } else if (user?.role === "distributor") {
+          localStorage.setItem("distributor_address", updates.address)
+        } else if (user?.role === "retailer") {
+          localStorage.setItem("retailer_address", updates.address)
+        } else if (user?.role === "consumer") {
+          localStorage.setItem("consumer_address", updates.address)
         }
       }
 
@@ -178,7 +190,7 @@ export function Sidebar() {
       }
 
       window.dispatchEvent(new Event("farmer_profile_updated"))
-      const roleLabel = user?.role === "farmer" ? "Farmer" : user?.role === "processor" ? "Processor" : "User"
+      const roleLabel = user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : "User"
       setSuccessMsg(`${roleLabel} settings saved successfully!`)
       setTimeout(() => {
         setShowModal(false)
@@ -252,16 +264,14 @@ export function Sidebar() {
                 )
               })}
 
-              {/* Farmer Settings Nav Button */}
-              {role === "farmer" && (
-                <button
-                  onClick={handleOpenModal}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 text-muted-foreground hover:bg-emerald-50 hover:text-primary text-sm font-medium cursor-pointer"
-                >
-                  <Edit3 className="h-5 w-5 shrink-0" />
-                  {!collapsed && <span>Settings</span>}
-                </button>
-              )}
+              {/* Settings Nav Button */}
+              <button
+                onClick={handleOpenModal}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 text-muted-foreground hover:bg-emerald-50 hover:text-primary text-sm font-medium cursor-pointer"
+              >
+                <Edit3 className="h-5 w-5 shrink-0" />
+                {!collapsed && <span>Settings</span>}
+              </button>
             </>
           ) : (
             <div className="space-y-1">
@@ -337,14 +347,8 @@ export function Sidebar() {
           <div className="w-full max-w-md bg-white rounded-3xl p-6 space-y-5 shadow-2xl border border-emerald-100">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                {user?.role === "farmer" ? (
-                  <>
-                    <Leaf className="h-5 w-5 text-emerald-600" />
-                    <span>⚙️ Farmer Settings</span>
-                  </>
-                ) : (
-                  <span>⚙️ Processor Settings</span>
-                )}
+                <Leaf className="h-5 w-5 text-emerald-600" />
+                <span>⚙️ {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "User"} Settings</span>
               </h3>
               <button onClick={() => setShowModal(false)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400">
                 <X className="h-5 w-5" />
@@ -362,13 +366,13 @@ export function Sidebar() {
               {/* 1. Name */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <span>{user?.role === "farmer" ? "1. 👤 Farmer Name" : "1. 👤 Processor Name"}</span>
+                  <span>1. 👤 {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "User"} Name</span>
                 </label>
                 <input
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder={user?.role === "farmer" ? "Enter farmer name" : "Enter company/processor name"}
+                  placeholder="Enter name"
                   className="flex h-9 w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                 />
               </div>
@@ -438,7 +442,7 @@ export function Sidebar() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <span>{user?.role === "farmer" ? "5. 📍 Farm Address" : "5. 📍 Facility Address"}</span>
+                    <span>5. 📍 {user?.role === "farmer" ? "Farm Address" : user?.role === "processor" ? "Facility Address" : user?.role === "distributor" ? "Warehouse Address" : user?.role === "retailer" ? "Store Address" : "Delivery Address"}</span>
                   </label>
                   <button
                     type="button"

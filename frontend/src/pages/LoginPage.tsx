@@ -35,10 +35,12 @@ export function LoginPage() {
             if (savedProfile.photo && !u.photo) u.photo = savedProfile.photo
             localStorage.setItem("farmchain_user", JSON.stringify(u))
           }
-          if (u.role === "farmer" && u.address) {
-            localStorage.setItem("farmer_address", u.address)
-          } else if (u.role === "processor" && u.address) {
-            localStorage.setItem("processor_address", u.address)
+          if (u.address) {
+            if (u.role === "farmer") localStorage.setItem("farmer_address", u.address)
+            else if (u.role === "processor") localStorage.setItem("processor_address", u.address)
+            else if (u.role === "distributor") localStorage.setItem("distributor_address", u.address)
+            else if (u.role === "retailer") localStorage.setItem("retailer_address", u.address)
+            else if (u.role === "consumer") localStorage.setItem("consumer_address", u.address)
           }
         } catch {}
 

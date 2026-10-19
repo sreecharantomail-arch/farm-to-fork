@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import axios from "axios"
 
-const API_URL = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api"
+const API_URL = (import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api").replace(/\/api\/?$/, "") + "/api"
 
 export interface User {
   id: string
@@ -30,14 +30,34 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(localStorage.getItem("farmchain_token"))
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const storedUser = localStorage.getItem("farmchain_user")
+      const storedToken = localStorage.getItem("farmchain_token") || localStorage.getItem("token")
+      if (storedUser && storedToken) {
+        return JSON.parse(storedUser)
+      }
+    } catch {
+      return null
+    }
+    return null
+  })
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("farmchain_token") || localStorage.getItem("token"))
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     const storedUser = localStorage.getItem("farmchain_user")
     if (storedUser && token) {
-      setUser(JSON.parse(storedUser))
+      try {
+        setUser(JSON.parse(storedUser))
+      } catch {
+        setUser(null)
+      }
+    }
+    if (token) {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
+    } else {
+      delete axios.defaults.headers.common["Authorization"]
     }
   }, [token])
 
@@ -56,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password })
       const { token: newToken, user: newUser } = res.data
       localStorage.setItem("farmchain_token", newToken)
+      localStorage.setItem("token", newToken)
       localStorage.setItem("farmchain_user", JSON.stringify(newUser))
       setToken(newToken)
       setUser(newUser)
@@ -74,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const { token: newToken, user: newUser } = res.data
       localStorage.setItem("farmchain_token", newToken)
+      localStorage.setItem("token", newToken)
       localStorage.setItem("farmchain_user", JSON.stringify(newUser))
       setToken(newToken)
       setUser(newUser)
@@ -85,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("farmchain_token")
+    localStorage.removeItem("token")
     localStorage.removeItem("farmchain_user")
     setToken(null)
     setUser(null)

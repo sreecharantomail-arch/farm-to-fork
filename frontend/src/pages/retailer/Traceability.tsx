@@ -7,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.on
 
 export function Traceability() {
   const { token } = useAuth()
-  const [batchNumber, setBatchNumber] = useState("")
+
   const [searchQuery, setSearchQuery] = useState("")
   const [traceData, setTraceData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -20,7 +20,7 @@ export function Traceability() {
     setLoading(true)
     setError("")
     setTraceData(null)
-    setBatchNumber(searchQuery)
+
 
     try {
       const res = await axios.get(`${API_URL}/retailer/traceability/${searchQuery}`, {
@@ -137,7 +137,7 @@ export function Traceability() {
               </div>
 
               {/* Dynamic Traceability Events */}
-              {traceData.events?.map((evt: any, index: number) => (
+              {traceData.events?.map((evt: any) => (
                 <div key={evt.id} className="relative pl-8">
                   <div className="absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white bg-slate-400 ring-4 ring-slate-50"></div>
                   

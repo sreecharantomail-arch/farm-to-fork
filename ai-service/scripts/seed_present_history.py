@@ -6,9 +6,11 @@ import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.local_database_guard import load_approved_local_env, assert_local_supabase_url
 
-load_dotenv("ai-service/.env")
+load_approved_local_env()
 from supabase import create_client
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -18,6 +20,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     print("Supabase credentials missing!")
     exit(1)
 
+assert_local_supabase_url(SUPABASE_URL, context="seed_present_history")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 np.random.seed(42)

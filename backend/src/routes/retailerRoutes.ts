@@ -1,6 +1,24 @@
 import { Router } from 'express';
 import { protect, authorize } from '../middleware/auth';
-import { createProductRequest, getMyRequests, getRetailerShipments, verifyBatch, receiveProduct, getRetailerInventory, recordSale, getSales, reportWastage, getWastage, getBatchTraceability, processReturn, getReturns, getDashboardData } from '../controllers/retailerController';
+import {
+  createProductRequest,
+  getMyRequests,
+  getRetailerShipments,
+  verifyBatch,
+  receiveProduct,
+  getShipmentDeliveryProof,
+  acknowledgeDeliveryReceipt,
+  reportDeliveryDiscrepancy,
+  getRetailerInventory,
+  recordSale,
+  getSales,
+  reportWastage,
+  getWastage,
+  getBatchTraceability,
+  processReturn,
+  getReturns,
+  getDashboardData
+} from '../controllers/retailerController';
 
 const router = Router();
 
@@ -15,6 +33,9 @@ router.get('/test', (req, res) => {
 router.post('/requests', createProductRequest);
 router.get('/requests', getMyRequests);
 router.get('/shipments', getRetailerShipments);
+router.get('/shipments/:id/proof-of-delivery', getShipmentDeliveryProof);
+router.post('/shipments/:id/acknowledge-delivery', acknowledgeDeliveryReceipt);
+router.post('/shipments/:id/report-discrepancy', reportDeliveryDiscrepancy);
 router.post('/verify-batch', verifyBatch);
 router.post('/receive-product', receiveProduct);
 router.get('/inventory', getRetailerInventory);

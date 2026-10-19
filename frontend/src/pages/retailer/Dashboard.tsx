@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import axios from "axios"
 import { useAuth } from "../../context/AuthContext"
 import { LayoutDashboard, Package, TrendingUp, AlertTriangle, ShieldAlert } from "lucide-react"
+import { DecisionSupportPanel } from "../../components/DecisionSupportPanel"
 
 const API_URL = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api"
 
@@ -39,6 +40,8 @@ export function Dashboard() {
         </div>
         <LayoutDashboard className="h-8 w-8 text-emerald-600 opacity-20" />
       </div>
+
+      <DecisionSupportPanel />
 
       {data && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

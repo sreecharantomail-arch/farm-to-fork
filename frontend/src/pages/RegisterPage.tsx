@@ -24,6 +24,39 @@ export function RegisterPage() {
 
   const roles = ["farmer", "processor", "distributor", "retailer", "consumer"]
 
+  const getRoleBadgeLabel = (role: string) => {
+    switch (role) {
+      case "farmer": return "Farmer Details"
+      case "processor": return "Processor Facility Details"
+      case "distributor": return "Distributor Hub Details"
+      case "retailer": return "Retail Store Details"
+      case "consumer": return "Consumer Profile Details"
+      default: return `${role.charAt(0).toUpperCase() + role.slice(1)} Details`
+    }
+  }
+
+  const getAddressLabel = (role: string) => {
+    switch (role) {
+      case "farmer": return "Farm Address"
+      case "processor": return "Processor Facility Address"
+      case "distributor": return "Warehouse / Hub Address"
+      case "retailer": return "Store / Retail Location"
+      case "consumer": return "Delivery / Home Address"
+      default: return "Address"
+    }
+  }
+
+  const getPhotoLabel = (role: string) => {
+    switch (role) {
+      case "farmer": return "Farmer Photo"
+      case "processor": return "Processor Photo / Facility Logo"
+      case "distributor": return "Distributor Photo / Logo"
+      case "retailer": return "Store / Retailer Photo"
+      case "consumer": return "Consumer Profile Photo"
+      default: return "Profile Photo"
+    }
+  }
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -70,8 +103,8 @@ export function RegisterPage() {
     setError("")
     setSuccessMsg("")
 
-    if ((formData.role === "farmer" || formData.role === "processor") && !formData.address.trim()) {
-      setError('Please set your location using the "Use Current Location" button.')
+    if (!formData.address.trim()) {
+      setError('Please set your location using the "Use Current Location" button or type your address.')
       return
     }
 
@@ -93,10 +126,18 @@ export function RegisterPage() {
         if (nameKey) userProfiles[nameKey] = profileData
         localStorage.setItem("registered_user_profiles", JSON.stringify(userProfiles))
 
-        if (formData.role === "farmer" && formData.address) {
-          localStorage.setItem("farmer_address", formData.address)
-        } else if (formData.role === "processor" && formData.address) {
-          localStorage.setItem("processor_address", formData.address)
+        if (formData.address) {
+          if (formData.role === "farmer") {
+            localStorage.setItem("farmer_address", formData.address)
+          } else if (formData.role === "processor") {
+            localStorage.setItem("processor_address", formData.address)
+          } else if (formData.role === "distributor") {
+            localStorage.setItem("distributor_address", formData.address)
+          } else if (formData.role === "retailer") {
+            localStorage.setItem("retailer_address", formData.address)
+          } else if (formData.role === "consumer") {
+            localStorage.setItem("consumer_address", formData.address)
+          }
         }
       } catch (err) {
         console.warn("Could not save to registered_user_profiles", err)
@@ -108,18 +149,17 @@ export function RegisterPage() {
       const stored = localStorage.getItem("farmchain_user")
       if (stored) {
         const u = JSON.parse(stored)
-        if (formData.role === "farmer" || formData.role === "processor") {
-          const userPhoto = formData.photo || photoPreview
-          const updatedUser = {
-            ...u,
-            phone: formData.phone,
-            address: formData.address,
-            photo: userPhoto,
-            photoLastUpdated: undefined,
-            addressLastUpdated: undefined,
-          }
-          localStorage.setItem("farmchain_user", JSON.stringify(updatedUser))
+        const userPhoto = formData.photo || photoPreview
+        const updatedUser = {
+          ...u,
+          phone: formData.phone,
+          address: formData.address,
+          photo: userPhoto,
+          photoLastUpdated: undefined,
+          addressLastUpdated: undefined,
         }
+        localStorage.setItem("farmchain_user", JSON.stringify(updatedUser))
+
         if (u.role === "consumer") navigate("/track")
         else navigate(`/${u.role}`)
       } else {
@@ -257,11 +297,10 @@ export function RegisterPage() {
             </select>
           </div>
 
-          {(formData.role === "farmer" || formData.role === "processor") && (
             <div className="space-y-4 pt-3 border-t border-emerald-100">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                  {formData.role === "farmer" ? "Farmer Details" : "Processor Details"}
+                  {getRoleBadgeLabel(formData.role)}
                 </span>
               </div>
 
@@ -284,7 +323,7 @@ export function RegisterPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-slate-700">
-                    {formData.role === "farmer" ? "Farm Address" : "Processor Address"}
+                    {getAddressLabel(formData.role)}
                   </label>
                   <button
                     type="button"
@@ -309,10 +348,10 @@ export function RegisterPage() {
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <textarea
                     rows={2}
-                    readOnly
                     value={formData.address}
-                    placeholder="Click 'Use Current Location' above to detect and fill address via GPS"
-                    className="flex w-full rounded-xl border border-slate-200 bg-slate-100 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none cursor-default resize-none"
+                    onChange={e => setFormData({ ...formData, address: e.target.value })}
+                    placeholder="Click 'Use Current Location' above to detect GPS address or type manually"
+                    className="flex w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-none"
                   />
                 </div>
                 <p className="text-[11px] text-slate-500">
@@ -323,13 +362,13 @@ export function RegisterPage() {
               {/* Photo */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">
-                  {formData.role === "farmer" ? "Farmer Photo" : "Processor Photo"}
+                  {getPhotoLabel(formData.role)}
                 </label>
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
                   {photoPreview ? (
                     <img
                       src={photoPreview}
-                      alt={formData.role === "farmer" ? "Farmer preview" : "Processor preview"}
+                      alt={`${formData.role} preview`}
                       className="h-12 w-12 rounded-full object-cover border-2 border-emerald-500 shrink-0"
                     />
                   ) : (
@@ -348,7 +387,6 @@ export function RegisterPage() {
                 </div>
               </div>
             </div>
-          )}
 
           <Button type="submit" className="w-full h-11 rounded-xl" disabled={loading}>
             {loading ? "Creating account..." : "Create Account"}

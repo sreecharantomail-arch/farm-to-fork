@@ -10,7 +10,9 @@ from supabase import create_client, Client
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+from services.local_database_guard import load_approved_local_env, assert_local_supabase_url
+
+load_approved_local_env()
 
 # Configuration
 GROUP_ID = os.getenv("KAFKA_MARKET_PRICE_DB_GROUP", "market-price-db-consumer")
@@ -24,6 +26,7 @@ class MarketPriceDBConsumer:
         if not supabase_url or not supabase_key:
             raise ValueError("Supabase credentials missing.")
         
+        assert_local_supabase_url(supabase_url, context="MarketPriceDBConsumer")
         self.supabase: Client = create_client(supabase_url, supabase_key)
         self.producer = KafkaEventProducer()
         self.consumer = get_consumer(GROUP_ID)

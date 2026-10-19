@@ -18,7 +18,11 @@ from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.local_database_guard import load_approved_local_env, assert_local_supabase_url
+
+load_approved_local_env()
 
 # Safely import supabase
 try:
@@ -35,6 +39,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     logger.error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set. Exiting.")
     sys.exit(1)
 
+assert_local_supabase_url(SUPABASE_URL, context="backfill_history")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 COMMODITIES = ["Tomato", "Onion", "Potato", "Carrot", "Cabbage", "Green Chilli", "Brinjal"]

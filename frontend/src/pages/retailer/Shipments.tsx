@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import axios from "axios"
 import { useAuth } from "../../context/AuthContext"
-import { Search, Filter, AlertCircle, Truck, Package, Factory, User, Calendar, MapPin, QrCode } from "lucide-react"
+import { Truck, Factory, Calendar, QrCode } from "lucide-react"
 
 const API_URL = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api"
 
@@ -9,8 +9,6 @@ export function Shipments() {
   const { token } = useAuth()
   const [shipments, setShipments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
   const fetchShipments = async () => {
     try {
       setLoading(true)
@@ -18,8 +16,8 @@ export function Shipments() {
         headers: { Authorization: `Bearer ${token}` }
       })
       setShipments(res.data.data || [])
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to load shipments")
+    } catch {
+      // Failed to load shipments
     } finally {
       setLoading(false)
     }

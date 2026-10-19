@@ -4,10 +4,15 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { IUser } from '../models/User';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'farmchain_super_secret_key';
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+    throw new Error("FATAL ERROR: JWT_SECRET is not defined in production environment.");
+  }
+  return process.env.JWT_SECRET || 'farmchain_super_secret_key';
+};
 
 const signToken = (id: string, role: string) =>
-  jwt.sign({ id, role }, JWT_SECRET, { expiresIn: '30d' });
+  jwt.sign({ id, role }, getJwtSecret(), { expiresIn: '30d' });
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -54,7 +59,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       .single();
 
     if (error || !user) {
-      res.status(500).json({ success: false, message: 'Server Error', error });
+      res.status(500).json({ success: false, message: 'Server Error' });
       return;
     }
 
@@ -75,7 +80,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, availability_status: (user as any).availability_status },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server Error', error });
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
 
@@ -118,7 +123,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, availability_status: (user as any).availability_status },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server Error', error });
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
 export const updateUserStatus = async (req: Request, res: Response): Promise<void> => {
@@ -134,7 +139,7 @@ export const updateUserStatus = async (req: Request, res: Response): Promise<voi
       .single();
 
     if (error) {
-      res.status(500).json({ success: false, message: 'Server Error updating status', error });
+      res.status(500).json({ success: false, message: 'Server Error updating status' });
       return;
     }
 
@@ -152,7 +157,7 @@ export const getDistributors = async (req: Request, res: Response): Promise<void
       .eq('role', 'distributor');
 
     if (error) {
-      res.status(500).json({ success: false, message: 'Server Error', error });
+      res.status(500).json({ success: false, message: 'Server Error' });
       return;
     }
 

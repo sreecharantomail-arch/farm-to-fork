@@ -61,3 +61,12 @@ export function getProcessorLocation(processorNameOrEmail?: string): string {
 
   return "Certified Processing Facility"
 }
+
+export function getApiBaseUrl(): string {
+  const raw = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  return raw.replace(/\/api\/?$/, "") + "/api";
+}
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem("farmchain_token") || localStorage.getItem("token");
+}

@@ -10,17 +10,22 @@ import { Dashboard } from "./pages/Dashboard"
 import { FarmerDashboard } from "./pages/FarmerDashboard"
 import { MyProductsPage } from "./pages/MyProductsPage"
 import { FarmerAIServices } from "./pages/FarmerAIServices"
+import { FarmerRequestsPage } from "./pages/FarmerRequestsPage"
+import { FarmerAnalyticsPage } from "./pages/FarmerAnalyticsPage"
+import { FarmerNotificationsPage } from "./pages/FarmerNotificationsPage"
 import { ProcessorDashboard } from "./pages/ProcessorDashboard"
 import { DistributorDashboard } from "./pages/DistributorDashboard"
-import { RetailerDashboard as OldRetailerDashboard } from "./pages/RetailerDashboard"
 import { AnalyticsDashboard } from "./pages/AnalyticsDashboard"
+import SupplyChainAnalytics from "./pages/analytics/SupplyChainAnalytics"
+import AnomalyDetection from "./pages/analytics/AnomalyDetection"
+import { AIObservability } from "./pages/analytics/AIObservability"
 import { Tracker } from "./pages/Tracker"
 import { AdminUsers } from "./pages/admin/AdminUsers"
 import { AdminUserDetails } from "./pages/admin/AdminUserDetails"
 import { AdminProducts } from "./pages/admin/AdminProducts"
 import { AdminProductDetails } from "./pages/admin/AdminProductDetails"
 
-import { Dashboard as RetailerDashboardPlaceholder } from "./pages/retailer/Dashboard"
+import { Dashboard as RetailerDashboard } from "./pages/retailer/Dashboard"
 import { ProductRequests as RetailerProductRequests } from "./pages/retailer/ProductRequests"
 import { Shipments as RetailerShipments } from "./pages/retailer/Shipments"
 import { ReceiveProduct as RetailerReceiveProduct } from "./pages/retailer/ReceiveProduct"
@@ -49,32 +54,46 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
 
           {/* Protected dashboard routes */}
-          <Route path="/admin" element={<DashboardLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="analytics" element={<AnalyticsDashboard />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="users/:id" element={<AdminUserDetails />} />
-            <Route path="products" element={<AdminProducts />} />
-            <Route path="products/:id" element={<AdminProductDetails />} />
+          <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+            <Route path="/admin" element={<DashboardLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="analytics" element={<AnalyticsDashboard />} />
+              <Route path="supply-chain-analytics" element={<SupplyChainAnalytics />} />
+              <Route path="anomaly-detection" element={<AnomalyDetection />} />
+              <Route path="ai-observability" element={<AIObservability />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="users/:id" element={<AdminUserDetails />} />
+              <Route path="products" element={<AdminProducts />} />
+              <Route path="products/:id" element={<AdminProductDetails />} />
+            </Route>
           </Route>
 
-          <Route path="/farmer" element={<DashboardLayout />}>
-            <Route index element={<FarmerDashboard />} />
-            <Route path="products" element={<MyProductsPage />} />
-            <Route path="ai-services" element={<FarmerAIServices />} />
+          <Route element={<ProtectedRoute allowedRoles={['farmer', 'admin']} />}>
+            <Route path="/farmer" element={<DashboardLayout />}>
+              <Route index element={<FarmerDashboard />} />
+              <Route path="products" element={<MyProductsPage />} />
+              <Route path="ai-services" element={<FarmerAIServices />} />
+              <Route path="requests" element={<FarmerRequestsPage />} />
+              <Route path="analytics" element={<FarmerAnalyticsPage />} />
+              <Route path="notifications" element={<FarmerNotificationsPage />} />
+            </Route>
           </Route>
 
-          <Route path="/processor" element={<DashboardLayout />}>
-            <Route index element={<ProcessorDashboard />} />
+          <Route element={<ProtectedRoute allowedRoles={['processor', 'admin']} />}>
+            <Route path="/processor" element={<DashboardLayout />}>
+              <Route index element={<ProcessorDashboard />} />
+            </Route>
           </Route>
 
-          <Route path="/distributor" element={<DashboardLayout />}>
-            <Route index element={<DistributorDashboard />} />
+          <Route element={<ProtectedRoute allowedRoles={['distributor', 'admin']} />}>
+            <Route path="/distributor" element={<DashboardLayout />}>
+              <Route index element={<DistributorDashboard />} />
+            </Route>
           </Route>
 
-          <Route element={<ProtectedRoute allowedRoles={['retailer']} />}>
+          <Route element={<ProtectedRoute allowedRoles={['retailer', 'admin']} />}>
             <Route path="/retailer" element={<DashboardLayout />}>
-              <Route index element={<RetailerDashboardPlaceholder />} />
+              <Route index element={<RetailerDashboard />} />
               <Route path="requests" element={<RetailerProductRequests />} />
               <Route path="shipments" element={<RetailerShipments />} />
               <Route path="receive" element={<RetailerReceiveProduct />} />
