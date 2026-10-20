@@ -27,7 +27,7 @@ if (fs.existsSync(envLocalPath)) {
 }
 
 const app = express();
-const PORT = process.env.BACKEND_PORT || 5000;
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 5000;
 const configuredCorsOrigins = process.env.CORS_ORIGIN?.trim();
 const defaultLocalOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 const corsOrigin = !configuredCorsOrigins || configuredCorsOrigins === '*'
@@ -79,6 +79,10 @@ supabase
       isReady = true;
     }
   });
+
+app.get('/', (req, res) => {
+  res.json({ service: 'FarmChain API', status: 'ok', health: '/health' });
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

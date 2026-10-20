@@ -277,8 +277,18 @@ def detect_fraud(data: dict):
 
 
 # ─────────────────────────────────────────────
-# Health Check
+# Health Check & Root
 # ─────────────────────────────────────────────
+@app.get("/")
+def root():
+    return {
+        "service": "FarmChain AI",
+        "status": "ok",
+        "version": "1.0.0",
+        "health": "/health",
+        "docs": "/docs"
+    }
+
 @app.get("/health")
 def health():
     price_model_status = "loaded" if (price_service and price_service.model) else "unavailable"

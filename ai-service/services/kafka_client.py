@@ -16,25 +16,32 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+
+def is_kafka_configured() -> bool:
+    return bool(KAFKA_BOOTSTRAP_SERVERS and KAFKA_BOOTSTRAP_SERVERS.strip() and KAFKA_BOOTSTRAP_SERVERS.lower() not in ("none", "disabled", "false"))
 
 # Kafka configuration
 def get_kafka_config() -> dict:
     return {
-        'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS
+        'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS or "localhost:9092"
     }
 
 def _kafka_unavailable() -> bool:
-    return Producer is None or Consumer is None or AdminClient is None
+    return (not is_kafka_configured()) or Producer is None or Consumer is None or AdminClient is None
 
 def get_producer():
     """Initialize and return a Kafka producer."""
+    if not is_kafka_configured():
+        return None
     if Producer is None:
         raise RuntimeError(f"Kafka client unavailable: {KAFKA_IMPORT_ERROR}")
     return Producer(get_kafka_config())
 
 def get_consumer(group_id: str):
     """Initialize and return a Kafka consumer."""
+    if not is_kafka_configured():
+        return None
     if Consumer is None:
         raise RuntimeError(f"Kafka client unavailable: {KAFKA_IMPORT_ERROR}")
     config = get_kafka_config()
@@ -45,12 +52,21 @@ def get_consumer(group_id: str):
     return Consumer(config)
 
 def get_admin_client():
+    if not is_kafka_configured():
+        return None
     if AdminClient is None:
         raise RuntimeError(f"Kafka client unavailable: {KAFKA_IMPORT_ERROR}")
     return AdminClient(get_kafka_config())
 
 def check_kafka_health() -> dict:
     """Check if Kafka is reachable and list topics."""
+    if not is_kafka_configured():
+        return {
+            "kafka_available": False,
+            "bootstrap_servers": None,
+            "message": "Kafka is not configured (KAFKA_BOOTSTRAP_SERVERS not set)",
+            "topics": []
+        }
     if _kafka_unavailable():
         logger.warning("Kafka support is disabled because the native client could not be loaded: %s", KAFKA_IMPORT_ERROR)
         return {
@@ -77,8 +93,7 @@ def check_kafka_health() -> dict:
 
 def create_topics(topics: List[str]):
     """Create topics if they don't exist."""
-    if _kafka_unavailable():
-        logger.warning("Kafka topics not created because the native client could not be loaded: %s", KAFKA_IMPORT_ERROR)
+    if not is_kafka_configured() or _kafka_unavailable():
         return
     admin_client = get_admin_client()
     new_topics = [NewTopic(topic, num_partitions=1, replication_factor=1) for topic in topics]
@@ -101,6 +116,9 @@ def create_topics(topics: List[str]):
 
 class KafkaEventProducer:
     def __init__(self):
+        if not is_kafka_configured():
+            self.producer = None
+            return
         try:
             self.producer = get_producer()
         except Exception as e:

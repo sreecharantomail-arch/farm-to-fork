@@ -116,11 +116,15 @@ def fetch_historical_prices(commodity: str, market: str, limit: int = 35) -> pd.
             return df
         else:
             found_count = len(data) if data else 0
-            logger.warning(f"Insufficient records in Supabase ({found_count} < 30).")
+            logger.warning(f"Insufficient records in Supabase ({found_count} < 30). Checking verified database cache...")
+            cached_df = load_verified_cache(commodity, market, limit)
+            if cached_df is not None and len(cached_df) >= 30:
+                logger.info(f"Successfully retrieved {len(cached_df)} records from verified database cache.")
+                return cached_df
             raise ValueError(
                 f"Insufficient verified historical data: {found_count}/30 required records found for {commodity} in {market}."
             )
-    except (ValueError, LocalDatabaseGuardError):
+    except LocalDatabaseGuardError:
         raise
     except Exception as e:
         logger.warning(f"Database query failed: {e}. Checking verified database cache...")
