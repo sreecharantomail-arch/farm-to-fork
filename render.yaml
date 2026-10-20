@@ -2,7 +2,6 @@ services:
   - type: web
     name: farmchain-api
     runtime: node
-    plan: free
     rootDir: backend
     buildCommand: npm install
     startCommand: npm run start
