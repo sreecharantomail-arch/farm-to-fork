@@ -63,7 +63,7 @@ export function getProcessorLocation(processorNameOrEmail?: string): string {
 }
 
 export function getApiBaseUrl(): string {
-  const raw = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  const raw = import.meta.env.VITE_API_URL || "https://farm-to-fork-tracker.onrender.com/api";
   return raw.replace(/\/api\/?$/, "") + "/api";
 }
 

@@ -96,23 +96,42 @@ export function FarmerAIAssistant() {
     try {
       const apiBase = getApiBaseUrl();
       const token = getAuthToken();
-      const response = await axios.post(`${apiBase}/ai/price-prediction`, {
-        commodity,
-        market,
-        forecast_days: forecastDays
-      }, {
-        timeout: 10000,
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      })
 
-      if (response.data.error) {
+      let response;
+      try {
+        response = await axios.post(`${apiBase}/ai/price-prediction`, {
+          commodity,
+          market,
+          forecast_days: forecastDays
+        }, {
+          timeout: 10000,
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+      } catch (backendErr: any) {
+        // If primary backend is unreachable, times out, or returns unavailable
+        // (common when using the cloud backend which doesn't host the local Python AI process, or when running port 8000 directly),
+        // seamlessly fall back to the direct local AI microservice at http://127.0.0.1:8000
+        try {
+          response = await axios.post(`http://127.0.0.1:8000/api/farmer/price-prediction`, {
+            commodity,
+            market,
+            forecast_days: forecastDays
+          }, {
+            timeout: 8000
+          });
+        } catch {
+          throw backendErr;
+        }
+      }
+
+      if (response.data.error || response.data.error_code) {
         setError(response.data.message || "Failed to fetch prediction")
         setResult(null)
       } else {
         setResult(response.data)
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "AI Service is unreachable.")
+      setError(err.response?.data?.message || "AI Service is currently offline. Please ensure the backend and AI service are running.")
       setResult(null)
     } finally {
       setLoading(false)
@@ -189,8 +208,8 @@ export function FarmerAIAssistant() {
     <div className="bg-white dark:bg-slate-800/50 rounded-2xl p-6 border border-slate-200 dark:border-white/5 shadow-sm text-slate-900 dark:text-white">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-lg">
-          <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        <div className="p-2.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+          <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
         </div>
         <div>
           <h2 className="text-xl font-bold">AI Price Prediction</h2>
@@ -207,7 +226,7 @@ export function FarmerAIAssistant() {
           <select
             value={commodity}
             onChange={(e) => setCommodity(e.target.value)}
-            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all dark:text-white font-medium"
+            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all dark:text-white font-medium"
           >
             <option value="Tomato">Tomato</option>
             <option value="Onion">Onion</option>
@@ -226,7 +245,7 @@ export function FarmerAIAssistant() {
           <select
             value={market}
             onChange={(e) => setMarket(e.target.value)}
-            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all dark:text-white font-medium"
+            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all dark:text-white font-medium"
           >
             <option value="Bangalore">Bangalore</option>
             <option value="Mysore">Mysore</option>
@@ -245,7 +264,7 @@ export function FarmerAIAssistant() {
           <select
             value={forecastDays}
             onChange={(e) => setForecastDays(Number(e.target.value))}
-            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all dark:text-white font-medium"
+            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all dark:text-white font-medium"
           >
             <option value={1}>1 Day Ahead</option>
             <option value={3}>3 Days Ahead</option>
@@ -257,7 +276,7 @@ export function FarmerAIAssistant() {
       <Button
         onClick={handlePredict}
         disabled={loading}
-        className="w-full py-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20 mb-6"
+        className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-600/20 mb-6"
       >
         {loading ? "Analyzing Real Market Trends..." : "Predict Price"}
       </Button>
@@ -274,16 +293,18 @@ export function FarmerAIAssistant() {
 
           {/* Stale Data Freshness Notice */}
           {result.warning && (
-            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-xs space-y-1">
-                <p className="font-bold text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-white/5 text-slate-700 dark:text-slate-200 flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0 mt-0.5">
+                <Info className="h-4 w-4" />
+              </div>
+              <div className="text-xs space-y-1 flex-1">
+                <p className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                   <span>Market Data Freshness Notice</span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
                     {result.data_age_days}d Since Observation
                   </span>
                 </p>
-                <p className="leading-relaxed">{result.warning}</p>
+                <p className="leading-relaxed text-slate-600 dark:text-slate-300">{result.warning}</p>
               </div>
             </div>
           )}
@@ -291,7 +312,7 @@ export function FarmerAIAssistant() {
           {/* Data Source Notice */}
           {(result.data_source === "CEDA_AGMARKNET" || result.data_source === "DATABASE_CACHE" || !result.data_source) && (
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 flex items-center gap-3">
-              <Info className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <Info className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <p className="text-xs font-medium">
                 {result.data_source === "CEDA_AGMARKNET"
                   ? "Primary mandi source active: Sourced from CEDA Agmarknet national database."
@@ -307,7 +328,7 @@ export function FarmerAIAssistant() {
                 onClick={() => setPriceMode("wholesale")}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                   priceMode === "wholesale"
-                    ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                    ? "bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -317,7 +338,7 @@ export function FarmerAIAssistant() {
                 onClick={() => setPriceMode("retail")}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                   priceMode === "retail"
-                    ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
+                    ? "bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -326,7 +347,7 @@ export function FarmerAIAssistant() {
             </div>
 
             <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
               <span>Viewing prices in <strong>{priceMode === 'retail' ? 'City Retail' : 'Wholesale Mandi'}</strong> tier</span>
             </div>
           </div>
@@ -346,30 +367,24 @@ export function FarmerAIAssistant() {
               </span>
             </div>
 
-            <div className={`p-4 rounded-xl border ${
-              result.is_stale
-                ? 'border-amber-200 dark:border-amber-500/20 bg-amber-50/50 dark:bg-amber-950/20'
-                : 'border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/30'
-            }`}>
-              <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                result.is_stale ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'
-              }`}>
+            <div className="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/30">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1 text-slate-500 dark:text-slate-400">
                 {result.is_stale ? "Live Forecast Status" : `Day ${forecastDays} Forecast`}
               </p>
               {result.is_stale ? (
                 <>
-                  <div className="text-xl font-extrabold text-amber-800 dark:text-amber-300">
+                  <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                     Suspended
                   </div>
-                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                     Data stale (no current forecast)
                   </span>
                 </>
               ) : (
                 <>
-                  <div className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">
+                  <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
                     {RUPEE}{finalPrice.toFixed(2)}
-                    <span className="text-xs font-normal text-blue-400/70 ml-1">/kg</span>
+                    <span className="text-xs font-normal text-emerald-500/70 ml-1">/kg</span>
                   </div>
                   <span className={`text-[11px] font-bold flex items-center gap-0.5 ${totalChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {totalChange >= 0 ? '+' : ''}{RUPEE}{totalChange.toFixed(2)} ({totalChange >= 0 ? '+' : ''}{totalChangePct.toFixed(1)}%)
@@ -402,67 +417,76 @@ export function FarmerAIAssistant() {
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                 Data Freshness
               </p>
-              <div className={`text-2xl font-extrabold ${result.is_stale ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              <div className="text-2xl font-extrabold text-slate-900 dark:text-white">
                 {result.data_age_days === 0 ? "Live / Today" : `${result.data_age_days}d ago`}
               </div>
-              <span className={`text-[11px] font-medium ${result.is_stale ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-slate-500 dark:text-slate-400"}`}>
-                {result.is_stale ? "Stale (Sync Needed)" : "Synchronized"}
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                {result.is_stale ? "Verified Stored Records" : "Synchronized"}
               </span>
             </div>
           </div>
 
           {/* Stale Data Forecast Suspension Banner OR Live Area Chart */}
           {result.is_stale ? (
-            <div className="p-6 rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 space-y-4">
+            <div className="p-6 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/30 space-y-4">
               <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
                   <AlertTriangle className="h-6 w-6" />
                 </div>
                 <div className="space-y-1.5 flex-1">
-                  <h3 className="text-base font-bold text-amber-900 dark:text-amber-200">
-                    Forward-Looking Price Forecast Suspended
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>Forward-Looking Price Forecast Suspended</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                      Safeguard Active
+                    </span>
                   </h3>
-                  <p className="text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
-                    The latest verified market observation for <strong>{commodity}</strong> in <strong>{market}</strong> was recorded on{" "}
-                    <strong>{formatAsOf(result.data_as_of)}</strong> ({result.data_age_days} days ago).
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    The latest verified market observation for <strong className="text-slate-900 dark:text-white font-semibold">{commodity}</strong> in <strong className="text-slate-900 dark:text-white font-semibold">{market}</strong> was recorded on{" "}
+                    <strong className="text-slate-900 dark:text-white font-semibold">{formatAsOf(result.data_as_of)}</strong> ({result.data_age_days} days ago).
                     To ensure farmers receive reliable and actionable advice, live forecasts are not projected from
-                    market observations older than <strong>{result.staleness_threshold_days || 2} days</strong>.
+                    market observations older than <strong className="text-slate-900 dark:text-white font-semibold">{result.staleness_threshold_days || 2} days</strong>.
                   </p>
-                  <div className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 pt-1">
-                    <p>• Verified daily mandi price history through {formatAsOf(result.data_as_of)} is available in the table below.</p>
-                    <p>• Live forward-looking forecasts will resume automatically once fresh market data is synchronized.</p>
+                  <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1 pt-1">
+                    <p className="flex items-start gap-1.5">
+                      <span className="text-emerald-500 font-bold">•</span>
+                      <span>Verified daily mandi price history through <strong>{formatAsOf(result.data_as_of)}</strong> is available in the table below.</span>
+                    </p>
+                    <p className="flex items-start gap-1.5">
+                      <span className="text-emerald-500 font-bold">•</span>
+                      <span>Live forward-looking forecasts will resume automatically once fresh market data is synchronized.</span>
+                    </p>
                   </div>
                 </div>
               </div>
 
               {/* Expired Projections Toggle */}
-              <div className="pt-3 border-t border-amber-200/80 dark:border-amber-500/20 flex flex-wrap items-center justify-between gap-3">
+              <div className="pt-3 border-t border-slate-200/80 dark:border-white/5 flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setShowExpiredProjections(!showExpiredProjections)}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
                 >
-                  <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  <Calendar className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>
                     {showExpiredProjections
                       ? "Hide Expired Projections"
                       : `View Expired Model Projections (${chartData[0]?.date || "Past"} – ${chartData[chartData.length - 1]?.date || "Past"} — Reference Only)`}
                   </span>
                 </button>
-                <span className="text-[11px] text-amber-700/80 dark:text-amber-400/80 italic">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 italic">
                   *Expired projections represent past model output anchored to {formatAsOf(result.data_as_of)}.
                 </span>
               </div>
 
               {/* Optional Expired Projections Chart (Clearly Watermarked & Stamped) */}
               {showExpiredProjections && (
-                <div className="mt-4 pt-4 border-t border-amber-200 dark:border-amber-500/20 space-y-3">
-                  <div className="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 text-xs font-semibold text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5 space-y-3">
+                  <div className="p-2.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-900 dark:text-emerald-200 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <AlertTriangle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       <span>HISTORICAL REFERENCE ONLY — DATES IN PAST ({chartData[0]?.date} to {chartData[chartData.length - 1]?.date})</span>
                     </div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-600/40 text-amber-900 dark:text-white">
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-600/30 text-emerald-900 dark:text-white border border-emerald-500/30">
                       Expired
                     </span>
                   </div>
@@ -471,8 +495,8 @@ export function FarmerAIAssistant() {
                     <AreaChart data={chartData} margin={{ top: 20, right: 25, left: 0, bottom: 15 }}>
                       <defs>
                         <linearGradient id="expiredAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.15} vertical={false} />
@@ -481,12 +505,12 @@ export function FarmerAIAssistant() {
                       {activeCurrentPrice > 0 && (
                         <ReferenceLine
                           y={activeCurrentPrice}
-                          stroke="#d97706"
+                          stroke="#059669"
                           strokeDasharray="4 4"
                           strokeWidth={1.5}
                           label={{
                             value: `Historical Base (${formatAsOf(result.data_as_of)}): ${RUPEE}${activeCurrentPrice.toFixed(2)}`,
-                            fill: '#d97706',
+                            fill: '#059669',
                             position: 'insideTopLeft',
                             fontSize: 11,
                             fontWeight: 700
@@ -498,21 +522,21 @@ export function FarmerAIAssistant() {
                           if (active && payload && payload.length) {
                             const data = payload[0].payload
                             return (
-                              <div className="bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl p-3 shadow-2xl text-xs space-y-2 min-w-[210px] text-white">
+                              <div className="bg-slate-900/95 backdrop-blur-md border border-emerald-500/30 rounded-xl p-3 shadow-2xl text-xs space-y-2 min-w-[210px] text-white">
                                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                                   <span className="font-semibold text-slate-200">{data.fullDate}</span>
-                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold text-[10px]">
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
                                     EXPIRED
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-baseline pt-0.5">
                                   <span className="text-slate-400 font-medium">Expired Projection:</span>
-                                  <span className="text-base font-extrabold text-amber-300">
+                                  <span className="text-base font-extrabold text-emerald-400">
                                     {RUPEE}{data.price.toFixed(2)}
                                     <span className="text-xs text-slate-400 font-normal">/kg</span>
                                   </span>
                                 </div>
-                                <div className="text-[10px] text-amber-400/90 italic pt-1 border-t border-slate-800">
+                                <div className="text-[10px] text-emerald-400/90 italic pt-1 border-t border-slate-800">
                                   Calculated from {formatAsOf(result.data_as_of)} observation (Date has passed)
                                 </div>
                               </div>
@@ -521,7 +545,7 @@ export function FarmerAIAssistant() {
                           return null
                         }}
                       />
-                      <Area type="monotone" dataKey="price" stroke="#f59e0b" strokeWidth={2.5} fill="url(#expiredAreaGradient)" dot={{ r: 4, fill: '#ffffff', stroke: '#f59e0b', strokeWidth: 2 }} />
+                      <Area type="monotone" dataKey="price" stroke="#10b981" strokeWidth={2.5} fill="url(#expiredAreaGradient)" dot={{ r: 4, fill: '#ffffff', stroke: '#10b981', strokeWidth: 2 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -534,7 +558,7 @@ export function FarmerAIAssistant() {
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <span>{forecastDays}-Day Price Forecast</span>
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300">
                       Live Forecast
                     </span>
                   </h3>
@@ -551,8 +575,8 @@ export function FarmerAIAssistant() {
                     </div>
                   )}
                   {dipItem && dipItem.price !== peakItem?.price && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold">
-                      <ArrowDownRight className="h-3.5 w-3.5 text-amber-500" />
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 font-semibold">
+                      <ArrowDownRight className="h-3.5 w-3.5 text-slate-500" />
                       <span>Low: {RUPEE}{lowestPrice.toFixed(2)} ({dipItem.date})</span>
                     </div>
                   )}
@@ -594,7 +618,7 @@ export function FarmerAIAssistant() {
                           <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-3 shadow-2xl text-xs space-y-2 min-w-[210px] text-white">
                             <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                               <span className="font-semibold text-slate-200">{data.fullDate}</span>
-                              <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold text-[10px]">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
                                 {data.dayLabel}
                               </span>
                             </div>
@@ -627,7 +651,7 @@ export function FarmerAIAssistant() {
             </div>
           )}
 
-          {/* Historical Price Table */ }
+          {/* Historical Price Table */}
           {historyTableData.length > 0 && (
             <div className="p-6 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/30">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -639,7 +663,7 @@ export function FarmerAIAssistant() {
                     Continuous daily market records leading up to {formatAsOf(result.data_as_of)}
                   </p>
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20">
                   {historyTableData.length} Days Tracked
                 </span>
               </div>
@@ -659,16 +683,14 @@ export function FarmerAIAssistant() {
                         key={i}
                         className={`border-b border-slate-100 dark:border-white/5 transition-colors ${
                           row.isLatest
-                            ? 'bg-blue-50/60 dark:bg-blue-500/10 hover:bg-blue-50 dark:hover:bg-blue-500/20'
+                            ? 'bg-emerald-50/60 dark:bg-emerald-500/10 hover:bg-emerald-50 dark:hover:bg-emerald-500/20'
                             : 'hover:bg-slate-100 dark:hover:bg-slate-800/40'
                         }`}
                       >
                         <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium flex items-center gap-2">
                           <span>{row.date}</span>
                           {row.isLatest && (
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              result.data_age_days === 0 ? "bg-emerald-500 text-white" : "bg-blue-500 text-white"
-                            }`}>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white">
                               {result.data_age_days === 0 ? "Today" : "Latest Record"}
                             </span>
                           )}
@@ -690,7 +712,7 @@ export function FarmerAIAssistant() {
           {/* Model Info Footer */}
           <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-white/5 text-xs text-slate-600 dark:text-slate-400 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
             <div className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0" />
+              <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>Forecast modeled on daily market patterns using XGBoost regression.</span>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-2 opacity-80">

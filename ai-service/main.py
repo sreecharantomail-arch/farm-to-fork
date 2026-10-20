@@ -147,6 +147,7 @@ import uuid
 from services.database import fetch_historical_prices
 
 @app.post("/api/farmer/price-prediction")
+@app.post("/ai/price-prediction")
 def predict_price_real(data: PricePredictionRequest):
     """
     Real AI Endpoint predicting multi-day prices using XGBoost.

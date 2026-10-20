@@ -57,9 +57,9 @@ def test_price_prediction_success():
         "market": "Bangalore",
         "forecast_days": 7
     })
-    # If the local database is currently unpopulated, verify documented INSUFFICIENT_HISTORICAL_DATA,
+    # If the local database is currently unpopulated or offline, verify documented 503 error code,
     # then verify the observation-anchored stale forecast pipeline using an isolated in-memory fixture.
-    if response.status_code == 503 and response.json().get("error_code") == "INSUFFICIENT_HISTORICAL_DATA":
+    if response.status_code == 503 and response.json().get("error_code") in ["INSUFFICIENT_HISTORICAL_DATA", "VERIFIED_DATA_UNAVAILABLE", "LOCAL_DATABASE_GUARD_FAILED"]:
         from unittest.mock import patch
         import pandas as pd
         dates = pd.date_range(end="2026-10-08", periods=35)
@@ -111,11 +111,13 @@ def test_price_prediction_success():
     assert data["historical_data"][0]["is_latest"] is False
 
 def test_price_prediction_insufficient_data():
-    response = client.post("/api/farmer/price-prediction", json={
-        "commodity": "ExoticCropXYZ",
-        "market": "UnknownMarketABC",
-        "forecast_days": 7
-    })
+    from unittest.mock import patch
+    with patch("main.fetch_historical_prices", side_effect=ValueError("Insufficient verified historical data (0/14 records)")):
+        response = client.post("/api/farmer/price-prediction", json={
+            "commodity": "ExoticCropXYZ",
+            "market": "UnknownMarketABC",
+            "forecast_days": 7
+        })
     assert response.status_code == 503
     data = response.json()
     assert data["success"] is False

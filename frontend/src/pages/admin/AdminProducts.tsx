@@ -49,12 +49,12 @@ export function AdminProducts() {
     fetchProducts()
   }, [token])
 
-  const handleDeleteProduct = async (_id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (!confirm("Are you sure you want to delete this product? This action cannot be undone.")) return
     try {
-      // Assuming a delete endpoint exists, if not we ignore or implement
-      // await axios.delete(`${API}/admin/products/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-      alert("Delete functionality pending implementation.")
+      const baseApi = API.replace(/\/admin\/?$/, "")
+      await axios.delete(`${baseApi}/products/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+      fetchProducts()
     } catch (err) {
       console.error(err)
       alert("Failed to delete product")
