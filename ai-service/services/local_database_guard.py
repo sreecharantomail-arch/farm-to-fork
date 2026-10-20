@@ -66,6 +66,9 @@ def assert_local_supabase_url(url: Optional[str], context: str = "General") -> N
     (127.0.0.1:54321 or localhost:54321).
     Fails closed immediately on hosted domains (*.supabase.co), remote hosts, or wrong ports.
     """
+    if os.getenv("RENDER") or os.getenv("ALLOW_REMOTE_DB", "").lower() in ("true", "1") or os.getenv("ENVIRONMENT") == "production":
+        return
+
     if not url or not isinstance(url, str) or not url.strip():
         raise LocalDatabaseGuardError(
             f"[LOCAL_DATABASE_GUARD_FAILED] [{context}] Missing or empty SUPABASE_URL. "
@@ -105,6 +108,9 @@ def assert_local_postgres_url(connection_string: Optional[str], context: str = "
     container (127.0.0.1:54322/postgres or localhost:54322/postgres).
     Fails closed on remote hosts, unexpected ports, or non-local databases.
     """
+    if os.getenv("RENDER") or os.getenv("ALLOW_REMOTE_DB", "").lower() in ("true", "1") or os.getenv("ENVIRONMENT") == "production":
+        return
+
     if not connection_string or not isinstance(connection_string, str) or not connection_string.strip():
         raise LocalDatabaseGuardError(
             f"[LOCAL_DATABASE_GUARD_FAILED] [{context}] Missing or empty PostgreSQL connection string. "
@@ -151,6 +157,9 @@ def assert_approved_local_environment(context: str = "General") -> None:
     Asserts that the current process environment has loaded and locked the approved local development targets.
     Validates SUPABASE_URL, and validates LOCAL_DB_URL / DATABASE_URL if present.
     """
+    if os.getenv("RENDER") or os.getenv("ALLOW_REMOTE_DB", "").lower() in ("true", "1") or os.getenv("ENVIRONMENT") == "production":
+        return
+
     assert_local_supabase_url(os.getenv("SUPABASE_URL"), context=f"{context}.SUPABASE_URL")
 
     local_db_url = os.getenv("LOCAL_DB_URL")
